@@ -116,6 +116,38 @@ class Message:
         self.body = data.get("body", "") or ""
         self.html_body = data.get("html", "") or ""
 
+def create_curl_session(proxies: Optional[dict] = None):
+    """
+    创建curl_cffi Session，处理impersonate不支持的情况
+    
+    Args:
+        proxies: 代理配置
+        
+    Returns:
+        curl_requests.Session对象
+    """
+    try:
+        # 先尝试使用impersonate chrome
+        session = curl_requests.Session(
+            proxies=proxies, 
+            impersonate="chrome"
+        )
+        logger.debug("使用impersonate chrome模式")
+    except Exception as e:
+        # 如果impersonate不支持，使用普通Session
+        if "impersonate" in str(e).lower():
+            logger.warning("impersonate chrome not supported, using regular session")
+            session = curl_requests.Session(proxies=proxies)
+            # 设置Chrome-like的User-Agent
+            session.headers.update({
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/134.0.0.0 Safari/537.36",
+            })
+        else:
+            # 其他错误直接抛出
+            raise e
+    
+    return session
+
 class TempMailClient:
     """TempMail.lol邮箱客户端"""
     def __init__(self, proxies: Optional[dict] = None):
@@ -125,12 +157,8 @@ class TempMailClient:
         Args:
             proxies: 代理配置
         """
-        self.session = curl_requests.Session(
-            proxies=proxies, 
-            impersonate="chrome"
-        )
+        self.session = create_curl_session(proxies=proxies)
         self.session.headers.update({
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
             "Accept": "application/json",
             "Content-Type": "application/json"
         })
@@ -231,6 +259,10 @@ def generate_oauth_url(
     code_verifier = _pkce_verifier()
     code_challenge = _sha256_b64url_no_pad(code_verifier)
     
+    # 添加调试信息
+    logger.debug(f"生成OAuth URL - State: {state[:20]}...")
+    logger.debug(f"生成OAuth URL - Code Verifier: {code_verifier[:20]}...")
+    
     params = {
         "client_id": Config.OAUTH_CLIENT_ID,
         "response_type": "code",
@@ -242,9 +274,14 @@ def generate_oauth_url(
         "prompt": "login",
         "id_token_add_organizations": "true",
         "codex_cli_simplified_flow": "true",
+        # 添加新参数以兼容最新API
+        "audience": "https://api.openai.com",
+        "response_mode": "query",
     }
     
     auth_url = f"{Config.OAUTH_AUTH_URL}?{urllib.parse.urlencode(params)}"
+    logger.debug(f"生成的OAuth URL: {auth_url[:100]}...")
+    
     return OAuthStart(
         auth_url=auth_url,
         state=state,
@@ -394,6 +431,67 @@ def decode_jwt_payload(token: str) -> dict:
         logger.error(f"解码JWT失败: {e}")
         return {}
 
+# ====================== 辅助函数 ======================
+
+def check_dependencies():
+    """检查依赖库版本"""
+    import sys
+    logger.info(f"Python版本: {sys.version}")
+    
+    try:
+        import curl_cffi
+        logger.info(f"curl_cffi版本: {curl_cffi.__version__}")
+    except ImportError:
+        logger.error("curl_cffi未安装")
+        raise
+    
+    try:
+        import requests
+        logger.info(f"requests版本: {requests.__version__}")
+    except ImportError:
+        logger.error("requests未安装")
+        raise
+
+def check_api_status():
+    """检查OpenAI API状态"""
+    try:
+        # 检查API可达性
+        response = requests.get("https://api.openai.com/v1/models", timeout=10)
+        logger.debug(f"OpenAI API状态: {response.status_code}")
+        if response.status_code == 200:
+            logger.info("OpenAI API连接正常")
+        else:
+            logger.warning(f"OpenAI API返回异常状态: {response.status_code}")
+    except Exception as e:
+        logger.warning(f"检查OpenAI API状态失败: {e}")
+
+def run_with_retry(func, max_retries=3, delay=5):
+    """
+    带重试的执行函数
+    
+    Args:
+        func: 要执行的函数
+        max_retries: 最大重试次数
+        delay: 重试间隔（秒）
+        
+    Returns:
+        函数返回值
+        
+    Raises:
+        Exception: 最后一次尝试的异常
+    """
+    for attempt in range(max_retries):
+        try:
+            return func()
+        except Exception as e:
+            logger.warning(f"尝试 {attempt + 1}/{max_retries} 失败: {e}")
+            if attempt < max_retries - 1:
+                logger.info(f"{delay}秒后重试...")
+                time.sleep(delay)
+            else:
+                logger.error("所有重试均失败")
+                raise e
+
 # ====================== 核心注册逻辑 ======================
 class CodexRegistration:
     """Codex注册器"""
@@ -406,12 +504,8 @@ class CodexRegistration:
             proxy: 代理URL
         """
         self.proxies = {"http": proxy, "https": proxy} if proxy else None
-        self.session = curl_requests.Session(
-            proxies=self.proxies,
-            impersonate="chrome"
-        )
+        self.session = create_curl_session(proxies=self.proxies)
         self.session.headers.update({
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
             "Accept": "application/json",
             "Content-Type": "application/json"
         })
@@ -514,18 +608,19 @@ class CodexRegistration:
         logger.info(f"Sentinel验证成功，token: {sen_token[:20]}...")
         return sen_token
     
-    def register_account(self, email: str, password: str) -> None:
+    def register_account(self, email: str, password: str, max_retries: int = 3) -> None:
         """
-        注册账户
+        注册账户，带重试机制
         
         Args:
             email: 邮箱地址
             password: 密码
+            max_retries: 最大重试次数
             
         Raises:
             RuntimeError: 注册失败
         """
-        # 提交注册
+        # 提交注册（带重试）
         signup_body = {
             "username": {"value": email, "kind": "email"},
             "screen_hint": "signup"
@@ -533,19 +628,56 @@ class CodexRegistration:
         
         sentinel_token = self.bypass_sentinel(self.session.cookies.get("oai-did"))
         
-        response = self.session.post(
-            "https://auth.openai.com/api/accounts/authorize/continue",
-            headers={
-                "referer": "https://auth.openai.com/create-account",
-                "accept": "application/json",
-                "content-type": "application/json",
-                "openai-sentinel-token": sentinel_token
-            },
-            json=signup_body
-        )
+        # 添加详细的请求信息
+        logger.debug(f"SignUp请求 - Email: {email}")
+        logger.debug(f"SignUp请求 - Sentinel Token: {sentinel_token[:20]}...")
         
-        if response.status_code != 200:
-            raise RuntimeError(f"SignUp失败: {response.text}")
+        for attempt in range(max_retries):
+            try:
+                response = self.session.post(
+                    "https://auth.openai.com/api/accounts/authorize/continue",
+                    headers={
+                        "referer": "https://auth.openai.com/create-account",
+                        "accept": "application/json",
+                        "content-type": "application/json",
+                        "openai-sentinel-token": sentinel_token,
+                        # 添加额外头部以兼容最新API
+                        "x-requested-with": "XMLHttpRequest",
+                        "sec-fetch-site": "same-origin",
+                        "sec-fetch-mode": "cors",
+                        "sec-fetch-dest": "empty",
+                    },
+                    json=signup_body,
+                    timeout=Config.REQUEST_TIMEOUT
+                )
+                
+                logger.debug(f"SignUp响应 - Status: {response.status_code}")
+                logger.debug(f"SignUp响应 - Headers: {dict(response.headers)}")
+                
+                if response.status_code == 200:
+                    break
+                elif response.status_code >= 500:
+                    # 服务器错误，重试
+                    logger.warning(f"SignUp服务器错误，尝试重试 {attempt + 1}/{max_retries}")
+                    time.sleep(2 ** attempt)  # 指数退避
+                else:
+                    # 其他错误，检查响应内容
+                    if "Invalid authorization step" in response.text:
+                        logger.error("检测到Invalid authorization step错误")
+                        logger.error(f"完整响应: {response.text}")
+                        # 可能是API更新，尝试添加新参数
+                        if attempt == max_retries - 1:
+                            raise RuntimeError(f"SignUp失败: {response.text}")
+                    else:
+                        raise RuntimeError(f"SignUp失败: {response.text}")
+                        
+            except Exception as e:
+                if attempt == max_retries - 1:
+                    raise e
+                logger.warning(f"SignUp请求异常，尝试重试 {attempt + 1}/{max_retries}: {e}")
+                time.sleep(2 ** attempt)
+        
+        logger.info("SignUp请求成功")
         
         # 设置密码
         reg_body = {"password": password, "username": email}
@@ -750,7 +882,7 @@ class CodexRegistration:
 
 def run_single_registration(proxy: Optional[str] = None) -> Optional[dict]:
     """
-    执行单次注册
+    执行单次注册（带完整的错误处理和重试机制）
     
     Args:
         proxy: 代理URL
@@ -759,21 +891,45 @@ def run_single_registration(proxy: Optional[str] = None) -> Optional[dict]:
         Token配置字典，失败时返回None
     """
     try:
+        logger.info("=" * 50)
+        logger.info("开始新的注册流程")
+        logger.info("=" * 50)
+        
+        # 检查依赖和API状态
+        check_dependencies()
+        check_api_status()
+        
         # 创建邮箱
         logger.info("正在生成临时邮箱...")
         email, email_client = create_temp_email(proxies={"http": proxy, "https": proxy} if proxy else None)
+        logger.info(f"邮箱创建成功: {email}")
         
         # 创建注册器
+        logger.info("初始化注册器...")
         registrar = CodexRegistration(proxy=proxy)
         
-        # 执行注册
-        result = registrar.run_registration(email_client)
+        # 执行注册（带重试）
+        def run_reg():
+            return registrar.run_registration(email_client)
         
-        logger.info(f"注册成功！邮箱: {result.get('email', 'unknown')}")
-        return result
+        result = run_with_retry(run_reg, max_retries=3, delay=5)
+        
+        if result:
+            logger.info("=" * 50)
+            logger.info(f"注册成功！邮箱: {result.get('email', 'unknown')}")
+            logger.info(f"账户ID: {result.get('account_id', 'unknown')}")
+            logger.info("=" * 50)
+            return result
+        else:
+            logger.error("注册返回空结果")
+            return None
         
     except Exception as e:
+        logger.error("=" * 50)
         logger.error(f"注册失败: {e}")
+        logger.error("完整的错误信息:")
+        logger.exception(e)
+        logger.error("=" * 50)
         return None
 
 # ====================== 文件操作模块 ======================
@@ -972,17 +1128,28 @@ def main():
     parser.add_argument("--output", default=Config.OUTPUT_FILE, help="输出文件")
     parser.add_argument("--convert-only", action="store_true", help="仅转换格式")
     parser.add_argument("--continuous", action="store_true", help="连续注册模式")
+    parser.add_argument("--debug", action="store_true", help="调试模式")
     
     args = parser.parse_args()
     
+    # 设置调试模式
+    if args.debug:
+        logging.getLogger().setLevel(logging.DEBUG)
+        logger.info("调试模式已启用")
+    
     if args.convert_only:
         # 仅转换格式
+        logger.info("启动格式转换模式...")
         convert_to_sub2api_format(args.output)
+        logger.info("格式转换完成！")
         return
     
     if args.continuous:
         # 连续注册模式
-        logger.info("启动连续注册模式...")
+        logger.info("=" * 50)
+        logger.info("启动连续注册模式")
+        logger.info(f"代理设置: {args.proxy}")
+        logger.info("=" * 50)
         success_count = 0
         
         while True:
@@ -999,26 +1166,38 @@ def main():
                     except Exception as e:
                         logger.error(f"转换格式失败: {e}")
                 
-                # 等待间隔
-                time.sleep(5)
+                # 等待间隔（显示进度）
+                for i in range(5):
+                    logger.info(f"下次注册将在 {5-i} 秒后开始...")
+                    time.sleep(1)
                 
             except KeyboardInterrupt:
+                logger.info("=" * 50)
                 logger.info(f"\n注册停止，共成功注册 {success_count} 个账户")
+                logger.info("=" * 50)
                 break
             except Exception as e:
                 logger.error(f"注册失败: {e}")
+                logger.error("3秒后重试...")
                 time.sleep(3)
     else:
         # 单次注册模式
-        logger.info("启动单次注册模式...")
+        logger.info("=" * 50)
+        logger.info("启动单次注册模式")
+        logger.info(f"代理设置: {args.proxy}")
+        logger.info("=" * 50)
         result = run_single_registration(proxy=args.proxy)
         
         if result:
             save_account(result, args.output)
             convert_to_sub2api_format(args.output)
+            logger.info("=" * 50)
             logger.info("注册完成！")
+            logger.info("=" * 50)
         else:
-            logger.error("注册失败")
+            logger.error("=" * 50)
+            logger.error("注册失败，请查看日志获取详细信息")
+            logger.error("=" * 50)
 
 if __name__ == "__main__":
     main()
