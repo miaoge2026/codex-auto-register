@@ -1,0 +1,23 @@
+2026-03-20 05:28:37,752 - INFO - 启动单次注册模式...
+2026-03-20 05:28:37,752 - INFO - 正在生成临时邮箱...
+2026-03-20 05:28:37,757 - ERROR - 注册失败: Failed to perform, curl: (7) Failed to connect to 127.0.0.1 port 7890 after 2 ms: Could not connect to server. See https://curl.se/libcurl/c/libcurl-errors.html first for more details.
+2026-03-20 05:28:37,757 - ERROR - 注册失败
+2026-03-20 05:29:46,584 - INFO - 启动单次注册模式...
+2026-03-20 05:29:46,585 - INFO - 正在生成临时邮箱...
+2026-03-20 05:29:46,844 - INFO - 生成邮箱: salisbarry3cccca@l5l.moonairse.com (TempMail.lol)
+2026-03-20 05:29:46,870 - INFO - 当前节点信息 -> Location: US, IP: 34.174.102.43
+2026-03-20 05:29:46,996 - INFO - 获取到oai-did: 9b611fd1-0544-4e20-86c0-1c0d6e7144ed
+2026-03-20 05:29:47,215 - INFO - Sentinel验证成功，token: gAAAAABpvNtLG5Zm5WNv...
+2026-03-20 05:29:48,805 - ERROR - 注册失败: SignUp失败: {
+  "error": {
+    "message": "Invalid authorization step.",
+    "type": "invalid_request_error",
+    "param": null,
+    "code": "invalid_auth_step"
+  }
+}
+2026-03-20 05:29:48,812 - ERROR - 注册失败
+2026-03-20 05:30:15,002 - INFO - 从 test_account.json 解析到 1 个账户
+2026-03-20 05:30:15,002 - INFO - [1] 转换账户: test@example.com
+2026-03-20 05:30:15,003 - INFO - 转换完成！已生成 sub2api_import.json
+2026-03-20 05:30:15,003 - INFO - 共 1 个账户可导入sub2api

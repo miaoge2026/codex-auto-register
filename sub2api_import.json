@@ -1,0 +1,29 @@
+{
+  "exported_at": "2026-03-20T05:30:15Z",
+  "proxies": [],
+  "accounts": [
+    {
+      "name": "test@example.com",
+      "platform": "openai",
+      "type": "oauth",
+      "credentials": {
+        "access_token": "test_token",
+        "chatgpt_account_id": "",
+        "client_id": "app_EMoamEEZ73f0CkXaXp7hrann",
+        "model_mapping": {
+          "gpt-5.4": "gpt-5.4",
+          "gpt-5.3-codex": "gpt-5.3-codex"
+        },
+        "organization_id": "",
+        "refresh_token": "test_refresh"
+      },
+      "extra": {
+        "email": "test@example.com"
+      },
+      "concurrency": 1,
+      "priority": 0,
+      "rate_multiplier": 1,
+      "auto_pause_on_expired": true
+    }
+  ]
+}
