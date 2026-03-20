@@ -1,0 +1,68 @@
+# Codex Auto Registration Configuration
+
+# OpenAI OAuth配置
+oauth:
+  client_id: "app_EMoamEEZ73f0CkXaXp7hrann"
+  issuer: "https://auth.openai.com"
+  redirect_uri: "http://localhost:1455/auth/callback"
+  scope: "openid email profile offline_access"
+
+# 代理配置
+proxy:
+  enabled: false
+  url: "http://127.0.0.1:7890"
+  type: "http"  # http, https, socks5
+
+# 输出文件配置
+output:
+  accounts_file: "accounts.json"
+  sub2api_file: "sub2api_import.json"
+  log_file: "codex_register.log"
+
+# Web服务器配置
+web:
+  host: "0.0.0.0"
+  port: 5000
+  debug: false
+  secret_key: "codex-auto-register-2026"
+
+# 注册配置
+registration:
+  timeout: 300
+  retry_attempts: 3
+  retry_delay: 5
+  continuous_mode: false
+
+# 邮箱配置
+email:
+  provider: "tempmail"  # tempmail, custom
+  tempmail_api: "https://api.tempmail.lol/v2"
+  timeout: 600
+
+# 安全配置
+security:
+  enable_auth: false
+  auth_token: ""
+  allowed_ips: []
+  rate_limit: 60
+
+# 日志配置
+logging:
+  level: "INFO"  # DEBUG, INFO, WARNING, ERROR
+  max_size: "10MB"
+  backup_count: 5
+  format: "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+
+# 性能配置
+performance:
+  worker_count: 4
+  request_timeout: 30
+  connect_timeout: 10
+  read_timeout: 20
+
+# 备份配置
+backup:
+  enabled: true
+  interval: 3600  # 秒
+  max_backups: 10
+  backup_dir: "backups"

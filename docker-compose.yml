@@ -1,0 +1,43 @@
+version: '3.8'
+
+services:
+  codex-register:
+    build: .
+    container_name: codex-register
+    ports:
+      - "5000:5000"
+    environment:
+      - PYTHONUNBUFFERED=1
+      - FLASK_ENV=production
+    volumes:
+      - ./logs:/app/logs
+      - ./data:/app/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000/api/status"]
+      interval: 30s
+      timeout: 30s
+      retries: 3
+      start_period: 5s
+    networks:
+      - codex-network
+
+  # 可选：添加Nginx反向代理
+  nginx:
+    image: nginx:alpine
+    container_name: codex-nginx
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf
+      - ./ssl:/etc/nginx/ssl
+    depends_on:
+      - codex-register
+    restart: unless-stopped
+    networks:
+      - codex-network
+
+networks:
+  codex-network:
+    driver: bridge

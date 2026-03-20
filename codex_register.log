@@ -21,3 +21,8 @@
 2026-03-20 05:30:15,002 - INFO - [1] 转换账户: test@example.com
 2026-03-20 05:30:15,003 - INFO - 转换完成！已生成 sub2api_import.json
 2026-03-20 05:30:15,003 - INFO - 共 1 个账户可导入sub2api
+2026-03-20 06:16:33,290 - INFO - [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+ * Running on all addresses (0.0.0.0)
+ * Running on http://127.0.0.1:5000
+ * Running on http://10.206.0.3:5000
+2026-03-20 06:16:33,290 - INFO - [33mPress CTRL+C to quit[0m

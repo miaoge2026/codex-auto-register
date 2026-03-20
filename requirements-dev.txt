@@ -1,0 +1,11 @@
+# 开发依赖
+black==23.9.1
+flake8==6.1.0
+mypy==1.5.1
+pytest==7.4.2
+pytest-cov==4.1.0
+isort==5.12.0
+pre-commit==3.4.0
+
+# 生产依赖（从requirements.txt继承）
+-r requirements.txt
