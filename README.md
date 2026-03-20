@@ -11,21 +11,52 @@
 - OAuth 2.0授权流程
 - 批量注册支持
 - 自动转换为sub2api格式
-- Web管理界面
+- Web管理界面（基础版 + 增强版）
 
 🔧 **技术特性**
 - 模块化设计，易于扩展
 - 完善的错误处理和日志系统
 - 命令行参数支持
-- Web管理界面
+- Web管理界面（支持身份验证）
 - 类型注解，代码质量高
 - 支持代理配置
 - 详细的运行日志
+- CI/CD流水线
+- Docker容器化部署
+- 自动备份恢复系统
+
+## 🏆 项目亮点
+
+### **代码质量**
+- ✅ 代码规范检查（flake8 + black + isort）
+- ✅ 类型检查（mypy）
+- ✅ 单元测试（pytest + coverage）
+- ✅ CI/CD自动化（GitHub Actions）
+
+### **Web界面**
+- ✅ 基础版：简单易用
+- ✅ 增强版：身份验证 + 速率限制
+- ✅ 实时状态监控
+- ✅ 性能指标收集
+- ✅ 敏感信息脱敏
+
+### **部署方案**
+- ✅ Docker容器化
+- ✅ docker-compose编排
+- ✅ 健康检查
+- ✅ 配置管理
+
+### **数据安全**
+- ✅ 自动备份
+- ✅ 一键恢复
+- ✅ 备份验证
+- ✅ 访问控制
 
 ## 环境要求
 
 - Python 3.7+
 - pip包管理器
+- Docker（可选，用于容器化部署）
 
 ## 安装步骤
 
@@ -36,24 +67,48 @@ cd codex-auto-register
 ```
 
 ### 2. 安装依赖
+
+**基础依赖**（Web界面）：
 ```bash
 pip install -r requirements.txt
 ```
 
+**开发依赖**（包含测试工具）：
+```bash
+pip install -r requirements-dev.txt
+```
+
 ### 3. 依赖库
+
+**生产依赖**：
 - `Flask` - Web框架
 - `requests` - HTTP请求库
 - `curl_cffi` - 模拟浏览器请求
 - `Werkzeug` - Web服务器网关接口
 - `Jinja2` - 模板引擎
+- `Flask-Limiter` - 速率限制
+- `PyYAML` - YAML配置解析
+
+**开发依赖**：
+- `black` - 代码格式化
+- `flake8` - 代码检查
+- `mypy` - 类型检查
+- `pytest` - 单元测试
+- `pytest-cov` - 测试覆盖率
+- `isort` - import排序
 
 ## 🚀 快速开始
 
 ### 方式一：Web管理界面（推荐）
 
-#### 启动Web服务
+#### 启动基础版Web服务
 ```bash
 python app.py
+```
+
+#### 启动增强版Web服务（推荐）
+```bash
+python app_enhanced.py
 ```
 
 #### 访问界面
@@ -65,6 +120,8 @@ python app.py
 - 📝 **日志查看**：实时日志更新、自动滚动
 - 📁 **文件管理**：文件预览、下载功能
 - 🔧 **配置管理**：代理设置、参数配置
+- 🛡️ **安全管理**：身份验证、访问控制
+- 📈 **性能监控**：系统指标、响应时间
 
 ### 方式二：命令行模式
 
@@ -86,6 +143,19 @@ python codex_generator_optimized.py --continuous
 #### 仅转换格式
 ```bash
 python codex_generator_optimized.py --convert-only --output accounts.json
+```
+
+### 方式三：Docker部署
+
+#### 使用docker-compose（推荐）
+```bash
+docker-compose up -d
+```
+
+#### 使用Dockerfile
+```bash
+docker build -t codex-register:latest .
+docker run -p 5000:5000 codex-register:latest
 ```
 
 ## 命令行参数
@@ -113,6 +183,10 @@ python codex_generator_optimized.py --convert-only --output accounts.json
 │ 统计信息    │ 文件管理                                  │
 │ - 成功/失败 │ - 文件列表                                │
 │ - 当前邮箱  │ - 预览/下载                               │
+├─────────────┼───────────────────────────────────────────┤
+│ 系统监控    │ 备份管理                                  │
+│ - 性能指标  │ - 创建/恢复备份                            │
+│ - 资源使用  │ - 备份列表                                │
 └─────────────┴───────────────────────────────────────────┘
 ```
 
@@ -124,71 +198,52 @@ python codex_generator_optimized.py --convert-only --output accounts.json
 3. **监控状态**：实时查看运行状态和统计信息
 4. **查看日志**：在日志面板查看实时输出
 5. **管理文件**：在文件管理面板预览或下载生成的文件
+6. **备份数据**：在备份管理面板创建或恢复备份
 
 ### 功能按钮说明
 - 🟢 **单次注册**：执行一次注册流程
 - 🔵 **连续注册**：持续注册直到手动停止
 - 🔴 **停止**：立即停止当前注册任务
 - 🔄 **刷新**：手动刷新日志和文件列表
+- 💾 **创建备份**：手动创建数据备份
+- 🔄 **恢复备份**：从备份恢复数据
 
 ## 配置文件
 
-### 默认配置（无需修改）
-```python
-# 在 codex_generator_optimized.py 中
-class Config:
-    OAUTH_CLIENT_ID = "app_EMoamEEZ73f0CkXaXp7hrann"
-    OAUTH_ISSUER = "https://auth.openai.com"
-    DEFAULT_PROXY = "http://127.0.0.1:7890"
-    OUTPUT_FILE = "accounts.json"
-    SUB2API_OUTPUT_FILE = "sub2api_import.json"
-    WEB_HOST = "0.0.0.0"
-    WEB_PORT = 5000
+### 配置文件格式
+```yaml
+# config.yaml
+oauth:
+  client_id: "app_EMoamEEZ73f0CkXaXp7hrann"
+  issuer: "https://auth.openai.com"
+  redirect_uri: "http://localhost:1455/auth/callback"
+
+proxy:
+  enabled: false
+  url: "http://127.0.0.1:7890"
+  type: "http"
+
+web:
+  host: "0.0.0.0"
+  port: 5000
+  debug: false
+
+security:
+  enable_auth: false
+  auth_token: ""
+  allowed_ips: []
+
+backup:
+  enabled: true
+  interval: 3600
+  max_backups: 10
 ```
 
-## 使用说明
-
-### 1. Web界面操作
-```bash
-# 启动Web服务
-python app.py
-
-# 访问 http://localhost:5000
-# 在浏览器中配置代理（如果需要）
-# 点击"单次注册"或"连续注册"开始
-```
-
-### 2. 命令行操作
-```bash
-# 不使用代理
-python codex_generator_optimized.py
-
-# 使用HTTP代理
-python codex_generator_optimized.py --proxy http://127.0.0.1:7890
-
-# 使用SOCKS5代理
-python codex_generator_optimized.py --proxy socks5://127.0.0.1:1080
-
-# 连续注册模式
-python codex_generator_optimized.py --continuous
-```
-
-### 3. 格式转换
-```bash
-# 将注册好的账号转换为sub2api格式
-python codex_generator_optimized.py --convert-only
-
-# 指定输入输出文件
-python codex_generator_optimized.py --convert-only --output my_accounts.json
-
-# 或者在Web界面中点击"格式转换"按钮
-```
-
-### 4. 查看日志
-```bash
-# 运行时会自动生成日志文件
-tail -f codex_register.log
-```
+### 配置优先级
+1. **命令行参数**（最高优先级）
+2. **环境变量**
+3. **配置文件**（config.yaml）
+4. **默认配置**（代码中定义）
 
 ## 输出文件
 
@@ -256,7 +311,70 @@ socks5://host:port
 python codex_generator_optimized.py --proxy http://us-proxy.example.com:8080
 
 # 在Web界面中输入代理地址
+# 或在config.yaml中配置
 ```
+
+## 备份和恢复
+
+### 自动备份
+系统会自动定时备份重要数据：
+- 备份间隔：可配置（默认3600秒）
+- 保留数量：可配置（默认10个）
+- 备份内容：账户文件、配置、日志
+
+### 手动备份
+```bash
+# 使用Web界面创建备份
+# 或调用备份API
+curl -X POST http://localhost:5000/api/backups
+```
+
+### 恢复备份
+```bash
+# 使用Web界面恢复备份
+# 或调用恢复API
+curl -X POST http://localhost:5000/api/backups/backup_20240101_120000/restore
+```
+
+## 开发指南
+
+### 代码质量检查
+```bash
+# 安装pre-commit
+pre-commit install
+
+# 手动运行代码检查
+flake8 .
+
+# 代码格式化
+black .
+
+# import排序
+isort .
+
+# 类型检查
+mypy .
+```
+
+### 运行测试
+```bash
+# 运行所有测试
+pytest tests/ -v
+
+# 运行特定测试
+pytest tests/test_core.py -v
+
+# 运行测试并生成覆盖率报告
+pytest tests/ -v --cov=./ --cov-report=html
+```
+
+### CI/CD流水线
+GitHub Actions会自动执行：
+- 代码检查（flake8 + black + isort）
+- 类型检查（mypy）
+- 运行测试（pytest + coverage）
+- 构建Docker镜像
+- 推送到Docker Hub
 
 ## 常见问题
 
@@ -281,6 +399,20 @@ python codex_generator_optimized.py --proxy http://us-proxy.example.com:8080
 3. 尝试更换网络环境
 4. 在Web界面中查看邮件接收日志
 
+### Q: Web界面无法访问
+**A**: 
+1. 确认服务已启动：`python app.py`
+2. 检查端口是否被占用（默认5000）
+3. 确认防火墙设置
+4. 尝试访问 `http://localhost:5000` 或 `http://127.0.0.1:5000`
+
+### Q: 如何启用身份验证
+**A**: 
+1. 编辑 `config.yaml`
+2. 设置 `security.enable_auth: true`
+3. 设置 `security.auth_token: "your-secret-token"`
+4. 重启Web服务
+
 ### Q: 如何导入到sub2api
 **A**: 
 1. **命令行方式**：
@@ -294,47 +426,66 @@ python codex_generator_optimized.py --proxy http://us-proxy.example.com:8080
 4. 进入"数据管理"页面
 5. 点击"导入数据"上传`sub2api_import.json`文件
 
-### Q: Web界面无法访问
-**A**: 
-1. 确认服务已启动：`python app.py`
-2. 检查端口是否被占用（默认5000）
-3. 确认防火墙设置
-4. 尝试访问 `http://localhost:5000` 或 `http://127.0.0.1:5000`
+## API接口文档
 
-## 日志说明
+### Web API端点
 
-程序会生成详细的运行日志：
+| 方法 | 端点 | 说明 |
+|------|------|------|
+| `GET` | `/` | 主页面 |
+| `POST` | `/api/start` | 开始注册 |
+| `POST` | `/api/stop` | 停止注册 |
+| `GET` | `/api/status` | 获取状态 |
+| `GET` | `/api/logs` | 获取日志 |
+| `GET` | `/api/files` | 文件列表 |
+| `GET` | `/api/files/<filename>` | 查看文件 |
+| `POST` | `/api/convert` | 格式转换 |
+| `GET/POST` | `/api/config` | 配置管理 |
+| `GET` | `/api/metrics` | 性能指标 |
+| `GET` | `/api/backups` | 备份列表 |
+| `POST` | `/api/backups` | 创建备份 |
+| `POST` | `/api/backups/<name>/restore` | 恢复备份 |
 
-### 日志级别
-- `INFO`: 常规操作信息
-- `WARNING`: 警告信息
-- `ERROR`: 错误信息
-- `DEBUG`: 调试信息（需在代码中启用）
+## 部署建议
 
-### 日志文件
-- **控制台输出**：实时显示运行状态
-- **Web界面日志**：实时日志面板
-- **日志文件**：`codex_register.log`（自动保存）
+### 开发环境
+```bash
+# 安装开发依赖
+pip install -r requirements-dev.txt
 
-## 错误代码
+# 运行开发服务器
+python app_enhanced.py
+```
 
-| 代码 | 说明 | 解决方案 |
-|------|------|----------|
-| 401 | 认证失败 | 检查代理或网络连接 |
-| 403 | 权限拒绝 | 更换代理节点 |
-| 429 | 请求过多 | 降低注册频率 |
-| 500 | 服务器错误 | 重试或稍后尝试 |
+### 生产环境
+```bash
+# 使用docker-compose（推荐）
+docker-compose up -d
 
-## 安全注意事项
+# 或使用Gunicorn
+gunicorn -w 4 -b 0.0.0.0:5000 app_enhanced:app
 
-⚠️ **重要提醒**
-1. 请遵守OpenAI的使用条款
-2. 不要滥用此工具进行大规模注册
-3. 合理控制注册频率，避免被封禁
-4. 妥善保管生成的账号信息
-5. 使用高质量的代理服务器
-6. Web界面建议添加身份验证
-7. 使用HTTPS加密通信（生产环境）
+# 使用Nginx反向代理（可选）
+# 配置SSL证书（推荐）
+```
+
+### Docker部署
+```bash
+# 构建镜像
+docker build -t codex-register:latest .
+
+# 运行容器
+docker run -p 5000:5000 -v ./logs:/app/logs codex-register:latest
+
+# 使用docker-compose
+docker-compose up -d
+```
+
+### 服务器要求
+- CPU: 1核以上
+- 内存: 1GB以上
+- 存储: 10GB以上
+- 网络: 稳定网络连接
 
 ## 性能优化建议
 
@@ -356,37 +507,19 @@ time.sleep(5)  # 增加到10-30秒
 ### 4. 并发控制
 当前版本为单线程注册，如需并发需要自行扩展。
 
-## 部署建议
+## 安全注意事项
 
-### 开发环境
-```bash
-python app.py
-```
-
-### 生产环境
-```bash
-# 使用Gunicorn部署
-pip install gunicorn
-gunicorn -w 4 -b 0.0.0.0:5000 app:app
-
-# 或使用Docker
-docker build -t codex-register .
-docker run -p 5000:5000 codex-register
-
-# 使用Nginx反向代理
-# 配置SSL证书
-```
-
-### Docker部署
-```dockerfile
-FROM python:3.9-slim
-WORKDIR /app
-COPY requirements.txt .
-RUN pip install -r requirements.txt
-COPY . .
-EXPOSE 5000
-CMD ["gunicorn", "-w", "4", "-b", "0.0.0.0:5000", "app:app"]
-```
+⚠️ **重要提醒**
+1. 请遵守OpenAI的使用条款
+2. 不要滥用此工具进行大规模注册
+3. 合理控制注册频率，避免被封禁
+4. 妥善保管生成的账号信息
+5. 使用高质量的代理服务器
+6. Web界面建议添加身份验证
+7. 使用HTTPS加密通信（生产环境）
+8. 定期更新依赖库
+9. 配置防火墙规则
+10. 监控异常访问
 
 ## 扩展开发
 
@@ -401,25 +534,41 @@ CMD ["gunicorn", "-w", "4", "-b", "0.0.0.0:5000", "app:app"]
 3. 添加命令行参数
 
 ### 扩展Web界面
-1. 在`app.py`中添加新的API端点
+1. 在`app_enhanced.py`中添加新的API端点
 2. 在模板中添加新的页面元素
 3. 添加JavaScript交互逻辑
 
-## API接口文档
+### 添加新的认证方式
+1. 在`require_auth`装饰器中添加认证逻辑
+2. 实现OAuth2.0或JWT认证
+3. 更新配置文件
 
-### Web API端点
+## 项目结构
 
-| 方法 | 端点 | 说明 |
-|------|------|------|
-| `GET` | `/` | 主页面 |
-| `POST` | `/api/start` | 开始注册 |
-| `POST` | `/api/stop` | 停止注册 |
-| `GET` | `/api/status` | 获取状态 |
-| `GET` | `/api/logs` | 获取日志 |
-| `GET` | `/api/files` | 文件列表 |
-| `GET` | `/api/files/<filename>` | 查看文件 |
-| `POST` | `/api/convert` | 格式转换 |
-| `GET/POST` | `/api/config` | 配置管理 |
+```
+codex-auto-register/
+├── .github/workflows/ci.yml         # CI/CD流水线
+├── .flake8                          # 代码检查配置
+├── .gitignore                       # Git忽略配置
+├── .pre-commit-config.yaml          # 预提交检查
+├── app.py                           # 基础Web界面
+├── app_enhanced.py                  # 增强版Web界面
+├── backup_restore.py                # 备份恢复系统
+├── codex_generator.py               # 原始代码
+├── codex_generator_optimized.py     # 优化后主程序
+├── config.yaml                      # 配置文件
+├── Dockerfile                       # Docker配置
+├── docker-compose.yml               # 容器编排
+├── logs/                            # 日志目录
+├── OPTIMIZATION_SUMMARY.md          # 优化说明
+├── pyproject.toml                   # Python项目配置
+├── README.md                        # 使用文档
+├── requirements-dev.txt             # 开发依赖
+├── requirements.txt                 # 生产依赖
+├── templates/                       # Web模板
+├── tests/                           # 测试目录
+└── 其他运行文件...
+```
 
 ## 贡献指南
 
@@ -436,6 +585,15 @@ CMD ["gunicorn", "-w", "4", "-b", "0.0.0.0:5000", "app:app"]
 - 添加必要的注释
 - 更新文档
 - 测试Web界面功能
+- 确保CI/CD通过
+
+### 开发流程
+1. Fork仓库
+2. 创建特性分支
+3. 提交代码
+4. 运行测试
+5. 提交Pull Request
+6. 等待审核
 
 ## 许可证
 
