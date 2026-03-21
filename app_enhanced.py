@@ -3,11 +3,9 @@ Codex Auto Registration Web Interface - Enhanced Version with Authentication and
 增强版Web管理界面，包含身份验证和性能监控
 """
 
-import os
 import json
 import threading
 import time
-import subprocess
 import hashlib
 import secrets
 from datetime import datetime
@@ -15,9 +13,30 @@ from pathlib import Path
 from functools import wraps
 
 from flask import Flask, render_template, request, jsonify, send_file, abort, session
-from flask_limiter import Limiter
-from flask_limiter.util import get_remote_address
-import yaml
+
+try:
+    import yaml
+except ImportError:  # pragma: no cover - 开发环境兼容
+    yaml = None
+
+try:
+    from flask_limiter import Limiter
+    from flask_limiter.util import get_remote_address
+except ImportError:  # pragma: no cover - 开发环境兼容
+    class Limiter:  # type: ignore[override]
+        """flask-limiter缺失时的轻量兜底实现。"""
+
+        def __init__(self, *args, **kwargs):
+            pass
+
+        def limit(self, _rule):
+            def decorator(func):
+                return func
+
+            return decorator
+
+    def get_remote_address():
+        return request.remote_addr or '127.0.0.1'
 
 from codex_generator_optimized import (
     run_single_registration, 
@@ -31,7 +50,7 @@ app = Flask(__name__)
 def load_config():
     """加载配置文件"""
     config_path = Path('config.yaml')
-    if config_path.exists():
+    if config_path.exists() and yaml is not None:
         with open(config_path, 'r', encoding='utf-8') as f:
             return yaml.safe_load(f)
     return {}
@@ -53,6 +72,48 @@ limiter = Limiter(
 AUTH_TOKEN = config.get('security', {}).get('auth_token', '')
 ENABLE_AUTH = config.get('security', {}).get('enable_auth', False)
 ALLOWED_IPS = config.get('security', {}).get('allowed_ips', [])
+
+
+# 文件路径配置
+BASE_DIR = Path('.').resolve()
+LOG_FILE = BASE_DIR / 'codex_register.log'
+ALLOWED_JSON_SUFFIXES = {'.json'}
+
+
+def resolve_json_file_path(filename):
+    """解析并校验仅允许访问工作目录下的JSON文件。"""
+    if not filename:
+        raise ValueError('文件名不能为空')
+
+    candidate = Path(filename)
+    if candidate.is_absolute():
+        raise ValueError('非法文件名')
+
+    resolved = (BASE_DIR / candidate).resolve()
+    try:
+        resolved.relative_to(BASE_DIR)
+    except ValueError as exc:
+        raise ValueError('非法文件名') from exc
+
+    if resolved.suffix.lower() not in ALLOWED_JSON_SUFFIXES:
+        raise ValueError('仅支持JSON文件')
+
+    return resolved
+
+
+def _mask_json_payload(data):
+    """递归脱敏JSON对象中的敏感token字段。"""
+    if isinstance(data, dict):
+        masked = {}
+        for key, value in data.items():
+            if key in {'access_token', 'refresh_token', 'id_token'} and isinstance(value, str):
+                masked[key] = mask_token(value)
+            else:
+                masked[key] = _mask_json_payload(value)
+        return masked
+    if isinstance(data, list):
+        return [_mask_json_payload(item) for item in data]
+    return data
 
 # 全局状态
 registration_status = {
@@ -212,13 +273,9 @@ def list_files():
 def get_file(filename):
     """获取文件内容"""
     try:
-        file_path = Path(filename)
+        file_path = resolve_json_file_path(filename)
         if not file_path.exists() or not file_path.is_file():
             return jsonify({'success': False, 'message': '文件不存在'})
-        
-        # 安全检查：防止目录遍历
-        if '..' in filename or filename.startswith('/'):
-            return jsonify({'success': False, 'message': '非法文件名'})
         
         with open(file_path, 'r', encoding='utf-8') as f:
             content = f.read()
@@ -240,13 +297,9 @@ def get_file(filename):
 def download_file(filename):
     """下载文件"""
     try:
-        file_path = Path(filename)
+        file_path = resolve_json_file_path(filename)
         if not file_path.exists() or not file_path.is_file():
             abort(404)
-        
-        # 安全检查
-        if '..' in filename or filename.startswith('/'):
-            abort(403)
         
         return send_file(file_path, as_attachment=True)
     except Exception as e:
@@ -258,10 +311,10 @@ def convert_format():
     """转换格式"""
     try:
         data = request.json
-        input_file = data.get('input_file', Config.OUTPUT_FILE)
-        output_file = data.get('output_file', Config.SUB2API_OUTPUT_FILE)
-        
-        convert_to_sub2api_format(input_file, output_file)
+        input_path = resolve_json_file_path(data.get('input_file', Config.OUTPUT_FILE))
+        output_path = resolve_json_file_path(data.get('output_file', Config.SUB2API_OUTPUT_FILE))
+
+        convert_to_sub2api_format(str(input_path), str(output_path))
         
         return jsonify({'success': True, 'message': '格式转换完成'})
     except Exception as e:
@@ -300,25 +353,21 @@ def get_metrics():
     return jsonify(metrics)
 
 def mask_sensitive_info(content):
-    """脱敏敏感信息"""
+    """脱敏敏感信息，支持标准JSON和JSON Lines。"""
     try:
         data = json.loads(content)
-        
-        # 脱敏access_token
-        if 'access_token' in data:
-            data['access_token'] = mask_token(data['access_token'])
-        
-        # 脱敏refresh_token
-        if 'refresh_token' in data:
-            data['refresh_token'] = mask_token(data['refresh_token'])
-        
-        # 脱敏id_token
-        if 'id_token' in data:
-            data['id_token'] = mask_token(data['id_token'])
-        
-        return json.dumps(data, ensure_ascii=False, indent=2)
-    except:
-        return content
+        return json.dumps(_mask_json_payload(data), ensure_ascii=False, indent=2)
+    except json.JSONDecodeError:
+        sanitized_lines = []
+        for line in content.splitlines():
+            stripped = line.strip()
+            if not stripped:
+                continue
+            try:
+                sanitized_lines.append(json.dumps(_mask_json_payload(json.loads(stripped)), ensure_ascii=False))
+            except json.JSONDecodeError:
+                return content
+        return '\n'.join(sanitized_lines)
 
 def mask_token(token):
     """脱敏token"""
@@ -388,8 +437,8 @@ def log_message(message, level='INFO'):
     if len(registration_status['log_content']) > 1000:
         registration_status['log_content'] = registration_status['log_content'][-500:]
     
-    # 写入文件
-    with open(Config.OUTPUT_FILE, 'a', encoding='utf-8') as f:
+    # 写入日志文件，避免污染账户数据
+    with open(LOG_FILE, 'a', encoding='utf-8') as f:
         f.write(log_entry + '\n')
 
 def log_error(message):

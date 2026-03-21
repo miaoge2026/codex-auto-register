@@ -6,9 +6,15 @@ import pytest
 import json
 import tempfile
 import os
+import sys
 from pathlib import Path
 from unittest.mock import Mock, patch
 
+ROOT_DIR = Path(__file__).resolve().parents[1]
+if str(ROOT_DIR) not in sys.path:
+    sys.path.insert(0, str(ROOT_DIR))
+
+from app_enhanced import mask_sensitive_info, resolve_json_file_path, LOG_FILE, registration_status, log_message
 from codex_generator_optimized import (
     get_password,
     Config,
@@ -171,6 +177,44 @@ class TestSecurity:
             oauth = generate_oauth_url()
             assert oauth.state not in states
             states.add(oauth.state)
+
+
+class TestEnhancedWebHelpers:
+    """增强版Web辅助函数测试"""
+
+    def test_mask_sensitive_info_supports_json_lines(self):
+        """测试JSON Lines中的敏感字段脱敏"""
+        content = '\n'.join([
+            json.dumps({"email": "test@example.com", "access_token": "a" * 30}),
+            json.dumps({"refresh_token": "b" * 30, "nested": {"id_token": "c" * 30}}),
+        ])
+
+        masked = mask_sensitive_info(content)
+        assert 'aaaaaaaaaa...aaaaaaaaaa' in masked
+        assert 'bbbbbbbbbb...bbbbbbbbbb' in masked
+        assert 'cccccccccc...cccccccccc' in masked
+        assert 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaa' not in masked
+
+    def test_resolve_json_file_path_rejects_path_traversal(self):
+        """测试文件路径校验防止目录遍历"""
+        with pytest.raises(ValueError):
+            resolve_json_file_path('../secrets.json')
+
+        with pytest.raises(ValueError):
+            resolve_json_file_path('/tmp/secrets.json')
+
+        with pytest.raises(ValueError):
+            resolve_json_file_path('accounts.txt')
+
+    def test_log_message_writes_to_log_file_only(self, tmp_path, monkeypatch):
+        """测试日志写入独立日志文件，避免污染账户文件"""
+        log_path = tmp_path / 'codex_register.log'
+        monkeypatch.setattr('app_enhanced.LOG_FILE', log_path)
+        registration_status['log_content'].clear()
+
+        log_message('hello world')
+
+        assert log_path.read_text(encoding='utf-8').strip().endswith('hello world')
 
 
 if __name__ == "__main__":
