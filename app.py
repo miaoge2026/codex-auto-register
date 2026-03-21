@@ -3,21 +3,19 @@ Codex Auto Registration Web Interface
 Web管理界面 for Codex自动注册工具
 """
 
-import os
-import json
 import threading
 import time
-import subprocess
 from datetime import datetime
 from pathlib import Path
 
 from flask import Flask, render_template, request, jsonify, send_file, abort
 
 from codex_generator_optimized import (
-    run_single_registration, 
+    run_single_registration,
     convert_to_sub2api_format,
-    Config
+    Config,
 )
+from web_utils import build_file_listing, parse_json_request, resolve_safe_path
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = 'codex-auto-register-2026'
@@ -112,7 +110,7 @@ def start_registration():
     if registration_status['is_running']:
         return jsonify({'success': False, 'message': '注册已在运行中'})
     
-    data = request.json
+    data = parse_json_request(request)
     proxy = data.get('proxy', '')
     continuous = data.get('continuous', False)
     
@@ -155,28 +153,16 @@ def get_logs():
 @app.route('/api/files')
 def list_files():
     """列出文件"""
-    files = []
-    current_dir = Path('.')
-    
-    for file in current_dir.glob('*.json'):
-        if file.is_file():
-            stat = file.stat()
-            files.append({
-                'name': file.name,
-                'size': stat.st_size,
-                'modified': datetime.fromtimestamp(stat.st_mtime).isoformat()
-            })
-    
-    return jsonify({'files': files})
+    return jsonify({'files': build_file_listing(Path('.'))})
 
 @app.route('/api/files/<filename>')
 def get_file(filename):
     """获取文件内容"""
     try:
-        file_path = Path(filename)
+        file_path = resolve_safe_path(filename, Path('.'))
         if not file_path.exists() or not file_path.is_file():
             return jsonify({'success': False, 'message': '文件不存在'})
-        
+
         with open(file_path, 'r', encoding='utf-8') as f:
             content = f.read()
         
@@ -186,6 +172,8 @@ def get_file(filename):
             'content': content,
             'size': len(content)
         })
+    except ValueError as e:
+        return jsonify({'success': False, 'message': str(e)})
     except Exception as e:
         return jsonify({'success': False, 'message': f'读取文件失败: {e}'})
 
@@ -193,19 +181,21 @@ def get_file(filename):
 def download_file(filename):
     """下载文件"""
     try:
-        file_path = Path(filename)
+        file_path = resolve_safe_path(filename, Path('.'))
         if not file_path.exists() or not file_path.is_file():
             abort(404)
-        
+
         return send_file(file_path, as_attachment=True)
-    except Exception as e:
+    except ValueError:
+        abort(403)
+    except Exception:
         abort(500)
 
 @app.route('/api/convert', methods=['POST'])
 def convert_format():
     """转换格式"""
     try:
-        data = request.json
+        data = parse_json_request(request)
         input_file = data.get('input_file', ACCOUNTS_FILE)
         output_file = data.get('output_file', SUB2API_FILE)
         
@@ -227,7 +217,7 @@ def config_management():
         })
     
     elif request.method == 'POST':
-        data = request.json
+        data = parse_json_request(request)
         proxy = data.get('proxy', '')
         
         registration_status['proxy'] = proxy
