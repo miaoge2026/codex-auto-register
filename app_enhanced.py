@@ -3,16 +3,12 @@ Codex Auto Registration Web Interface - Enhanced Version with Authentication and
 增强版Web管理界面，包含身份验证和性能监控
 """
 
-import os
-import json
+import hashlib
 import threading
 import time
-import subprocess
-import hashlib
-import secrets
 from datetime import datetime
-from pathlib import Path
 from functools import wraps
+from pathlib import Path
 
 from flask import Flask, render_template, request, jsonify, send_file, abort, session
 from flask_limiter import Limiter
@@ -20,10 +16,11 @@ from flask_limiter.util import get_remote_address
 import yaml
 
 from codex_generator_optimized import (
-    run_single_registration, 
+    run_single_registration,
     convert_to_sub2api_format,
-    Config
+    Config,
 )
+from web_utils import build_file_listing, mask_sensitive_info, parse_json_request, resolve_safe_path
 
 app = Flask(__name__)
 
@@ -113,7 +110,7 @@ def login():
     if not ENABLE_AUTH:
         return jsonify({'success': True, 'message': 'Auth disabled'})
     
-    data = request.json
+    data = parse_json_request(request)
     username = data.get('username')
     password = data.get('password')
     
@@ -144,7 +141,7 @@ def start_registration():
     if registration_status['is_running']:
         return jsonify({'success': False, 'message': '注册已在运行中'})
     
-    data = request.json
+    data = parse_json_request(request)
     proxy = data.get('proxy', '')
     continuous = data.get('continuous', False)
     
@@ -193,33 +190,17 @@ def get_logs():
 @require_auth
 def list_files():
     """列出文件"""
-    files = []
-    current_dir = Path('.')
-    
-    for file in current_dir.glob('*.json'):
-        if file.is_file():
-            stat = file.stat()
-            files.append({
-                'name': file.name,
-                'size': stat.st_size,
-                'modified': datetime.fromtimestamp(stat.st_mtime).isoformat()
-            })
-    
-    return jsonify({'files': files})
+    return jsonify({'files': build_file_listing(Path('.'))})
 
 @app.route('/api/files/<filename>')
 @require_auth
 def get_file(filename):
     """获取文件内容"""
     try:
-        file_path = Path(filename)
+        file_path = resolve_safe_path(filename, Path('.'))
         if not file_path.exists() or not file_path.is_file():
             return jsonify({'success': False, 'message': '文件不存在'})
-        
-        # 安全检查：防止目录遍历
-        if '..' in filename or filename.startswith('/'):
-            return jsonify({'success': False, 'message': '非法文件名'})
-        
+
         with open(file_path, 'r', encoding='utf-8') as f:
             content = f.read()
         
@@ -232,6 +213,8 @@ def get_file(filename):
             'content': content,
             'size': len(content)
         })
+    except ValueError as e:
+        return jsonify({'success': False, 'message': str(e)})
     except Exception as e:
         return jsonify({'success': False, 'message': f'读取文件失败: {e}'})
 
@@ -240,16 +223,14 @@ def get_file(filename):
 def download_file(filename):
     """下载文件"""
     try:
-        file_path = Path(filename)
+        file_path = resolve_safe_path(filename, Path('.'))
         if not file_path.exists() or not file_path.is_file():
             abort(404)
-        
-        # 安全检查
-        if '..' in filename or filename.startswith('/'):
-            abort(403)
-        
+
         return send_file(file_path, as_attachment=True)
-    except Exception as e:
+    except ValueError:
+        abort(403)
+    except Exception:
         abort(500)
 
 @app.route('/api/convert', methods=['POST'])
@@ -257,7 +238,7 @@ def download_file(filename):
 def convert_format():
     """转换格式"""
     try:
-        data = request.json
+        data = parse_json_request(request)
         input_file = data.get('input_file', Config.OUTPUT_FILE)
         output_file = data.get('output_file', Config.SUB2API_OUTPUT_FILE)
         
@@ -282,7 +263,7 @@ def config_management():
         })
     
     elif request.method == 'POST':
-        data = request.json
+        data = parse_json_request(request)
         proxy = data.get('proxy', '')
         
         registration_status['proxy'] = proxy
@@ -299,44 +280,19 @@ def get_metrics():
     metrics['memory_usage'] = get_memory_usage()
     return jsonify(metrics)
 
-def mask_sensitive_info(content):
-    """脱敏敏感信息"""
-    try:
-        data = json.loads(content)
-        
-        # 脱敏access_token
-        if 'access_token' in data:
-            data['access_token'] = mask_token(data['access_token'])
-        
-        # 脱敏refresh_token
-        if 'refresh_token' in data:
-            data['refresh_token'] = mask_token(data['refresh_token'])
-        
-        # 脱敏id_token
-        if 'id_token' in data:
-            data['id_token'] = mask_token(data['id_token'])
-        
-        return json.dumps(data, ensure_ascii=False, indent=2)
-    except:
-        return content
-
-def mask_token(token):
-    """脱敏token"""
-    if len(token) < 20:
-        return token
-    return token[:10] + '...' + token[-10:]
-
 def get_memory_usage():
     """获取内存使用情况"""
     try:
         import psutil
+
         process = psutil.Process()
         return {
             'memory_percent': process.memory_percent(),
             'memory_info': process.memory_info()._asdict()
         }
-    except:
+    except Exception:
         return {'memory_percent': 0, 'memory_info': {}}
+
 
 def run_registration_thread(proxy=None, continuous=False):
     """运行注册线程"""
@@ -389,7 +345,7 @@ def log_message(message, level='INFO'):
         registration_status['log_content'] = registration_status['log_content'][-500:]
     
     # 写入文件
-    with open(Config.OUTPUT_FILE, 'a', encoding='utf-8') as f:
+    with open('codex_register.log', 'a', encoding='utf-8') as f:
         f.write(log_entry + '\n')
 
 def log_error(message):
